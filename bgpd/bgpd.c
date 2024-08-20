@@ -1745,6 +1745,12 @@ static bool bgp_peer_conf_if_to_su_update_v6(struct peer_connection *connection,
 {
 	struct nbr_connected *ifc_nbr;
 
+	if (ifp->nbr_connected) {
+        zlog_debug("CCCCCCCC: Neighbor connected: %d", ifp->nbr_connected->count);
+    }
+    if (ifc_nbr = listnode_head(ifp->nbr_connected)){
+        zlog_debug("CCCCCCCC: Neighbor found");
+    }
 	/* Have we learnt the peer's IPv6 link-local address? */
 	if (ifp->nbr_connected
 	    && (ifc_nbr = listnode_head(ifp->nbr_connected))) {
@@ -1781,8 +1787,9 @@ void bgp_peer_conf_if_to_su_update(struct peer_connection *connection)
 	 * we are in an interface based configuration or not
 	 */
 	if (!peer->conf_if)
-		return;
+        return;
 
+    zlog_debug("bgp_peer_conf_if_to_su_update: we are in interface peering");
 	old_su = connection->su;
 
 	prev_family = connection->su.sa.sa_family;
@@ -1792,10 +1799,13 @@ void bgp_peer_conf_if_to_su_update(struct peer_connection *connection)
 		 * derive the
 		 * peer's IPv4 address.
 		 */
-		if (!CHECK_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY))
+		if (!CHECK_FLAG(peer->flags, PEER_FLAG_IFPEER_V6ONLY)){
+            zlog_debug("bgp_peer_conf_if_to_su_update: Deriving IPv4");
 			peer_addr_updated =
 				bgp_peer_conf_if_to_su_update_v4(connection,
 								 ifp);
+
+        }
 
 		/* If "v6only" or we can't derive peer's IPv4 address, see if
 		 * we've
@@ -1803,10 +1813,12 @@ void bgp_peer_conf_if_to_su_update(struct peer_connection *connection)
 		 * source
 		 * IPv6 address in router advertisement.
 		 */
-		if (!peer_addr_updated)
+		if (!peer_addr_updated){
+        zlog_debug("bgp_peer_conf_if_to_su_update: Deriving IPv6");
 			peer_addr_updated =
 				bgp_peer_conf_if_to_su_update_v6(connection,
 								 ifp);
+        }
 	}
 	/* If we could derive the peer address, we may need to install the
 	 * password
@@ -1816,10 +1828,12 @@ void bgp_peer_conf_if_to_su_update(struct peer_connection *connection)
 	 * needed.
 	 */
 	if (peer_addr_updated) {
+        zlog_debug("bgp_peer_conf_if_to_su_update: Peer addr updated");
 		if (CHECK_FLAG(peer->flags, PEER_FLAG_PASSWORD)
 		    && prev_family == AF_UNSPEC)
 			bgp_md5_set(connection);
 	} else {
+        zlog_debug("bgp_peer_conf_if_to_su_update: Peer addr not updated");
 		if (CHECK_FLAG(peer->flags, PEER_FLAG_PASSWORD)
 		    && prev_family != AF_UNSPEC)
 			bgp_md5_unset(connection);
@@ -1832,6 +1846,7 @@ void bgp_peer_conf_if_to_su_update(struct peer_connection *connection)
 	 * If they are the same, nothing to do here, move along
 	 */
 	if (!sockunion_same(&old_su, &connection->su)) {
+        zlog_debug("bgp_peer_conf_if_to_su_update: Sockunion changed");
 		union sockunion new_su = connection->su;
 		struct bgp *bgp = peer->bgp;
 
@@ -1854,6 +1869,7 @@ void bgp_peer_conf_if_to_su_update(struct peer_connection *connection)
 		 */
 		node = listnode_lookup(bgp->peer, peer);
 		if (node) {
+            zlog_debug("bgp_peer_conf_if_to_su_update: Node found");
 			/*
 			 * Let's reset the peer->su release and
 			 * reset it and put it back.  We have to
@@ -4265,11 +4281,16 @@ struct peer *peer_lookup_by_hostname(struct bgp *bgp, const char *hostname)
 	return NULL;
 }
 
+void print_peer(struct hash_bucket *bucket, void *n){
+        struct peer *peer = bucket->data;
+        zlog_debug("BBBBB: Peer: %s %pSU", peer->host, &peer->connection->su);
+}
 struct peer *peer_lookup(struct bgp *bgp, union sockunion *su)
 {
 	struct peer *peer = NULL;
 	struct peer tmp_peer;
 	struct peer_connection connection;
+    zlog_debug("AAAAAA: Usinng manual lookup");
 
 	memset(&connection, 0, sizeof(struct peer_connection));
 	memset(&tmp_peer, 0, sizeof(struct peer));
@@ -4285,8 +4306,11 @@ struct peer *peer_lookup(struct bgp *bgp, union sockunion *su)
 	connection.su = *su;
 
 	if (bgp != NULL) {
+        zlog_debug("AAAAAA: bgp != NULL");
+        hash_iterate(bgp->peerhash, print_peer, NULL);
 		peer = hash_lookup(bgp->peerhash, &tmp_peer);
 	} else if (bm->bgp != NULL) {
+        zlog_debug("AAAAAA: bm->bgp != NULL");
 		struct listnode *bgpnode, *nbgpnode;
 
 		for (ALL_LIST_ELEMENTS(bm->bgp, bgpnode, nbgpnode, bgp)) {
@@ -4369,20 +4393,27 @@ peer_group_lookup_dynamic_neighbor(struct bgp *bgp, struct prefix *prefix,
 	struct peer_group *group = NULL;
 	struct listnode *node, *nnode;
 
+    zlog_debug("ZZZZ: group lookup");
 	*listen_range = NULL;
 	if (bgp != NULL) {
-		for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group))
+        zlog_debug("ZZZZ: BGP != NULL");
+		for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group)){
+            zlog_debug("ZZZZ: Iterating");
 			if ((range = peer_group_lookup_dynamic_neighbor_range(
 				     group, prefix)))
 				break;
+        }
 	} else if (bm->bgp != NULL) {
+        zlog_debug("ZZZZ: bm->bgp != NULL");
 		struct listnode *bgpnode, *nbgpnode;
 
 		for (ALL_LIST_ELEMENTS(bm->bgp, bgpnode, nbgpnode, bgp))
-			for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group))
+			for (ALL_LIST_ELEMENTS(bgp->group, node, nnode, group)){
+                zlog_debug("ZZZZ: Iterating");
 				if ((range = peer_group_lookup_dynamic_neighbor_range(
 					     group, prefix)))
 					goto found_range;
+            }
 	}
 
 found_range:
@@ -4399,20 +4430,24 @@ struct peer *peer_lookup_dynamic_neighbor(struct bgp *bgp, union sockunion *su)
 	struct prefix *listen_range;
 	int dncount;
 
+    zlog_debug("YYYY: Lookup begin");
 	if (!sockunion2hostprefix(su, &prefix))
 		return NULL;
+    zlog_debug("YYYY: prefix found");
 
 	/* See if incoming connection matches a configured listen range. */
 	group = peer_group_lookup_dynamic_neighbor(bgp, &prefix, &listen_range);
 
 	if (!group)
 		return NULL;
+    zlog_debug("YYYY: group found");
 
 
 	gbgp = group->bgp;
 
 	if (!gbgp)
 		return NULL;
+    zlog_debug("YYYY: group has bgp");
 
 	if (bgp_debug_neighbor_events(NULL))
 		zlog_debug(
@@ -4463,6 +4498,7 @@ struct peer *peer_lookup_dynamic_neighbor(struct bgp *bgp, union sockunion *su)
 			  peer->host, group->name,
 			  gbgp->dynamic_neighbors_limit);
 	}
+    zlog_debug("YYYY: found peer");
 	return peer;
 }
 

@@ -403,7 +403,10 @@ static void bgp_accept(struct event *thread)
 
 	sockunion_init(&su);
 
+
+    zlog_debug("XXXX: Looking up by listener name: %s", listener->name);
 	bgp = bgp_lookup_by_name(listener->name);
+    hash_iterate(bgp->peerhash, print_peer, NULL);
 
 	/* Register accept thread. */
 	accept_sock = EVENT_FD(thread);
@@ -453,13 +456,16 @@ static void bgp_accept(struct event *thread)
 		return;
 	}
 	set_nonblocking(bgp_sock);
+    zlog_debug("XXXX: Socket opened");
 
 	/* Obtain BGP instance this connection is meant for.
 	 * - if it is a VRF netns sock, then BGP is in listener structure
 	 * - otherwise, the bgp instance need to be demultiplexed
 	 */
-	if (listener->bgp)
+	if (listener->bgp){
+        zlog_debug("XXXX: Listener has BGP");
 		bgp = listener->bgp;
+    }
 	else if (bgp_get_instance_for_inc_conn(bgp_sock, &bgp)) {
 		if (bgp_debug_neighbor_events(NULL))
 			zlog_debug(
@@ -474,10 +480,12 @@ static void bgp_accept(struct event *thread)
 	/* Set TCP keepalive when TCP keepalive is enabled */
 	bgp_update_setsockopt_tcp_keepalive(bgp, bgp_sock);
 
+    zlog_debug("XXXXX: SU: %pSU", &su);
 	/* Check remote IP address */
 	peer1 = peer_lookup(bgp, &su);
 
 	if (!peer1) {
+        zlog_debug("XXXXX: Using dynamic lookup");
 		peer1 = peer_lookup_dynamic_neighbor(bgp, &su);
 		if (peer1) {
 			connection1 = peer1->connection;
@@ -520,6 +528,7 @@ static void bgp_accept(struct event *thread)
 
 	if (!peer1) {
 		if (bgp_debug_neighbor_events(NULL)) {
+            zlog_debug("XXXXX: end");
 			zlog_debug(
 				"[Event] %s connection rejected(%s:%u:%s) - not configured and not valid for dynamic",
 				inet_sutop(&su, buf), bgp->name_pretty, bgp->as,
